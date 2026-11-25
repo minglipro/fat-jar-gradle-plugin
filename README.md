@@ -32,7 +32,7 @@ git clone <repo-url> fat-jar
 cd fat-jar
 
 ./gradlew :testFatJar:fatJar
-java -jar testFatJar/build/libs/testFatJar-1.2.1-fat.jar
+java -jar testFatJar/build/libs/testFatJar-1.2.2-fat.jar
 ```
 
 预期输出包含：
@@ -70,7 +70,7 @@ pluginManagement {
 // build.gradle.kts
 plugins {
     application
-    id("com.mingliqiye.fatjar") version "1.2.1"
+    id("com.mingliqiye.fatjar") version "1.2.2"
 }
 
 repositories {

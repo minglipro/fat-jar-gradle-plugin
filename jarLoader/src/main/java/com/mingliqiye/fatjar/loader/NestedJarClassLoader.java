@@ -5,11 +5,15 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.net.MalformedURLException;
 import java.net.URL;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.Enumeration;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.jar.Attributes;
 import java.util.jar.Manifest;
 
@@ -47,11 +51,40 @@ public final class NestedJarClassLoader extends ClassLoader {
 
     private final List<Root> roots;
     private final String urlToken;
+    private final Map<String, Path> extractedDirectories = new ConcurrentHashMap<>();
 
     private NestedJarClassLoader(List<Root> roots) {
         super("fat-jar", ClassLoader.getPlatformClassLoader());
         this.roots = List.copyOf(roots);
         this.urlToken = FatJarUrlStreamHandler.register(this);
+    }
+
+    /** 类路径扫描（Spring / MyBatis 等）需要目录资源，这里按需解压到临时目录。 */
+    private static final Path SCAN_TEMP_ROOT = createScanTempRoot();
+
+    private static Path createScanTempRoot() {
+        try {
+            Path root = Files.createTempDirectory("fatjar-scan-");
+            Runtime.getRuntime().addShutdownHook(
+                    new Thread(() -> deleteRecursively(root), "fatjar-scan-cleanup"));
+            return root;
+        } catch (IOException ex) {
+            throw new IllegalStateException("Cannot create fat jar scan temp directory", ex);
+        }
+    }
+
+    private static void deleteRecursively(Path root) {
+        try (var paths = Files.walk(root)) {
+            paths.sorted(Comparator.reverseOrder()).forEach(path -> {
+                try {
+                    Files.deleteIfExists(path);
+                } catch (IOException ignored) {
+                    // best effort cleanup
+                }
+            });
+        } catch (IOException ignored) {
+            // best effort cleanup
+        }
     }
 
     /**
@@ -171,8 +204,9 @@ public final class NestedJarClassLoader extends ClassLoader {
     protected URL findResource(String name) {
         String normalized = normalize(name);
         for (int i = 0; i < roots.size(); i++) {
-            if (roots.get(i).contains(normalized)) {
-                return createUrl(i, normalized);
+            URL url = resourceUrl(i, normalized);
+            if (url != null) {
+                return url;
             }
         }
         return null;
@@ -183,11 +217,73 @@ public final class NestedJarClassLoader extends ClassLoader {
         String normalized = normalize(name);
         List<URL> urls = new ArrayList<>();
         for (int i = 0; i < roots.size(); i++) {
-            if (roots.get(i).contains(normalized)) {
-                urls.add(createUrl(i, normalized));
+            URL url = resourceUrl(i, normalized);
+            if (url != null) {
+                urls.add(url);
             }
         }
         return Collections.enumeration(urls);
+    }
+
+    /**
+     * 文件资源返回 {@code fatjar:} URL；目录资源返回临时目录的 {@code file:} URL，
+     * 因为 Spring / MyBatis 的类路径扫描只认 file/jar 协议的目录。
+     */
+    private URL resourceUrl(int rootIndex, String name) {
+        if (isDirectoryRequest(name)) {
+            try {
+                return directoryUrl(rootIndex, name);
+            } catch (IOException ex) {
+                throw new IllegalStateException("Cannot extract classpath directory " + name, ex);
+            }
+        }
+        Root root = roots.get(rootIndex);
+        return root.contains(name) ? createUrl(rootIndex, name) : null;
+    }
+
+    private boolean isDirectoryRequest(String name) {
+        if (name.isEmpty() || name.endsWith("/")) {
+            return true;
+        }
+        boolean fileExists = roots.stream().anyMatch(root -> root.contains(name));
+        return !fileExists && roots.stream().anyMatch(root -> root.hasDirectory(name));
+    }
+
+    private URL directoryUrl(int rootIndex, String name) throws IOException {
+        String directory = name.isEmpty() || name.endsWith("/") ? name : name + "/";
+        Root root = roots.get(rootIndex);
+        List<String> entries = root.entriesUnder(directory);
+        if (entries.isEmpty()) {
+            return null;
+        }
+        Path extracted = extractedDirectory(rootIndex, root, directory, entries);
+        return extracted.toUri().toURL();
+    }
+
+    private Path extractedDirectory(int rootIndex, Root root, String directory, List<String> entries)
+            throws IOException {
+        String key = urlToken + '|' + rootIndex + '|' + directory;
+        Path existing = extractedDirectories.get(key);
+        if (existing != null) {
+            return existing;
+        }
+        synchronized (this) {
+            existing = extractedDirectories.get(key);
+            if (existing != null) {
+                return existing;
+            }
+            Path parent = Files.createDirectories(
+                    SCAN_TEMP_ROOT.resolve(urlToken).resolve(Integer.toString(rootIndex)));
+            Path target = Files.createTempDirectory(parent, "dir-");
+            try {
+                root.extractTo(target, directory, entries);
+            } catch (IOException | RuntimeException ex) {
+                deleteRecursively(target);
+                throw ex;
+            }
+            extractedDirectories.put(key, target);
+            return target;
+        }
     }
 
     @Override
@@ -280,6 +376,46 @@ public final class NestedJarClassLoader extends ClassLoader {
                 throw new IOException("No such entry: " + path);
             }
             return reader.read(entry);
+        }
+
+        private boolean hasDirectory(String path) {
+            String prefixPath = prefix + path + "/";
+            for (String entry : reader.names()) {
+                if (entry.startsWith(prefixPath)) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        private List<String> entriesUnder(String directory) {
+            String prefixPath = prefix + directory;
+            List<String> entries = new ArrayList<>();
+            for (String entry : reader.names()) {
+                if (entry.startsWith(prefixPath)) {
+                    entries.add(entry);
+                }
+            }
+            entries.sort(Comparator.naturalOrder());
+            return entries;
+        }
+
+        private void extractTo(Path target, String directory, List<String> entries) throws IOException {
+            String base = prefix + directory;
+            for (String entry : entries) {
+                String relative = entry.substring(base.length());
+                if (relative.isEmpty()) {
+                    continue;
+                }
+                Path destination = target.resolve(relative).normalize();
+                if (!destination.startsWith(target)) {
+                    continue;
+                }
+                if (destination.getParent() != null) {
+                    Files.createDirectories(destination.getParent());
+                }
+                Files.write(destination, reader.read(entry));
+            }
         }
     }
 }

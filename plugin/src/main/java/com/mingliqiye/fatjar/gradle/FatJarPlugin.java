@@ -22,7 +22,7 @@ import org.gradle.api.plugins.BasePluginExtension;
  * }
  *
  * dependencies {
- *     fatJarLoader("com.mingliqiye.gradle.plugin.fatjar:jarLoader:1.2.1")
+ *     fatJarLoader("com.mingliqiye.gradle.plugin.fatjar:jarLoader:1.2.2")
  * }
  *
  * fatJar {
@@ -46,7 +46,7 @@ public class FatJarPlugin implements Plugin<Project> {
     public static final String LOADER_GROUP = "com.mingliqiye.gradle.plugin.fatjar";
     public static final String LOADER_NAME = "jarLoader";
     public static final String ANNOTATION_NAME = "annotation";
-    private static final String LOADER_FALLBACK_VERSION = "1.2.1";
+    private static final String LOADER_FALLBACK_VERSION = "1.2.2";
 
     /** 嵌套 jar 内业务 classes 的默认前缀。 */
     public static final String CLASSES_PREFIX = "BOOT-INF/classes/";
@@ -100,7 +100,7 @@ public class FatJarPlugin implements Plugin<Project> {
 
     /**
      * 默认 loader 坐标：版本优先取插件 jar 的 {@code Implementation-Version}，
-     * 取不到时退回 1.2.1。
+     * 取不到时退回 1.2.2。
      */
     public static String defaultLoaderCoordinates() {
         return LOADER_GROUP + ":" + LOADER_NAME + ":" + pluginVersion();

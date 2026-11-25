@@ -7,6 +7,7 @@ import java.io.InputStream;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Enumeration;
 import java.util.List;
 import java.util.ServiceLoader;
 
@@ -63,6 +64,19 @@ public final class Main {
 
         System.out.println("app resource      : " + read("app-resource.txt"));
         System.out.println("lib resource      : " + read("lib-resource.txt"));
+
+        // Spring/MyBatis 的类路径扫描依赖目录资源
+        Enumeration<URL> packageDirs = Main.class.getClassLoader()
+                .getResources("com/example/testfatjar/greeting/");
+        int directoryCount = 0;
+        while (packageDirs.hasMoreElements()) {
+            packageDirs.nextElement();
+            directoryCount++;
+        }
+        System.out.println("package dirs      : " + directoryCount);
+        if (directoryCount == 0) {
+            throw new IllegalStateException("Classpath directory resources are missing");
+        }
 
         // Log4j2 等库会走 URL.toURI().toURL()，验证 fatjar 协议已全局注册
         String appViaUri = readUri("app-resource.txt");
