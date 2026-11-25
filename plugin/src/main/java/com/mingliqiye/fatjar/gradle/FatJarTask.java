@@ -31,6 +31,7 @@ import org.gradle.api.provider.MapProperty;
 import org.gradle.api.provider.Property;
 import org.gradle.api.tasks.Input;
 import org.gradle.api.tasks.InputFiles;
+import org.gradle.api.tasks.Internal;
 import org.gradle.api.tasks.Optional;
 import org.gradle.api.tasks.OutputFile;
 import org.gradle.api.tasks.PathSensitive;
@@ -111,8 +112,52 @@ public abstract class FatJarTask extends DefaultTask {
     @Input
     public abstract MapProperty<String, String> getManifestAttributes();
 
+    @Internal("Represented as part of archiveFile")
+    public abstract Property<String> getArchiveBaseName();
+
+    @Internal("Represented as part of archiveFile")
+    public abstract Property<String> getArchiveAppendix();
+
+    @Internal("Represented as part of archiveFile")
+    public abstract Property<String> getArchiveVersion();
+
+    @Internal("Represented as part of archiveFile")
+    public abstract Property<String> getArchiveExtension();
+
+    @Internal("Represented as part of archiveFile")
+    public abstract Property<String> getArchiveClassifier();
+
     @OutputFile
     public abstract RegularFileProperty getArchiveFile();
+
+    /**
+     * 按 Gradle 归档任务的命名规则拼产物名：
+     * {@code baseName[-appendix][-version][-classifier][.extension]}，
+     * 空段和 {@code unspecified} 版本会自动省略。
+     */
+    public static String archiveFileName(String baseName, String appendix, String version,
+            String classifier, String extension) {
+        StringBuilder name = new StringBuilder(baseName == null ? "" : baseName.trim());
+        appendPart(name, appendix);
+        if (hasText(version) && !"unspecified".equals(version.trim())) {
+            appendPart(name, version);
+        }
+        appendPart(name, classifier);
+        if (hasText(extension)) {
+            name.append('.').append(extension.trim());
+        }
+        return name.toString();
+    }
+
+    private static void appendPart(StringBuilder name, String part) {
+        if (hasText(part)) {
+            name.append('-').append(part.trim());
+        }
+    }
+
+    private static boolean hasText(String value) {
+        return value != null && !value.isBlank();
+    }
 
     @TaskAction
     public void assemble() throws IOException {

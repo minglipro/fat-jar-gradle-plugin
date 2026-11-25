@@ -6,6 +6,7 @@ import org.gradle.api.artifacts.Configuration;
 import org.gradle.api.attributes.Category;
 import org.gradle.api.attributes.LibraryElements;
 import org.gradle.api.attributes.Usage;
+import org.gradle.api.plugins.BasePluginExtension;
 
 /**
  * 把业务工程打成 Spring Boot 风格的嵌套 fat jar。
@@ -21,7 +22,7 @@ import org.gradle.api.attributes.Usage;
  * }
  *
  * dependencies {
- *     fatJarLoader("com.mingliqiye.gradle.plugin.fatjar:jarLoader:1.1.2")
+ *     fatJarLoader("com.mingliqiye.gradle.plugin.fatjar:jarLoader:1.2.0")
  * }
  *
  * fatJar {
@@ -45,13 +46,16 @@ public class FatJarPlugin implements Plugin<Project> {
     public static final String LOADER_GROUP = "com.mingliqiye.gradle.plugin.fatjar";
     public static final String LOADER_NAME = "jarLoader";
     public static final String ANNOTATION_NAME = "annotation";
-    private static final String LOADER_FALLBACK_VERSION = "1.1.2";
+    private static final String LOADER_FALLBACK_VERSION = "1.2.0";
 
     /** 嵌套 jar 内业务 classes 的默认前缀。 */
     public static final String CLASSES_PREFIX = "BOOT-INF/classes/";
 
     /** 嵌套 jar 内依赖 jar 的默认前缀。 */
     public static final String LIB_PREFIX = "BOOT-INF/lib/";
+
+    /** 产物名默认 classifier：{@code <project>-<version>-fat.jar}。 */
+    public static final String DEFAULT_ARCHIVE_CLASSIFIER = "fat";
 
     @Override
     public void apply(Project project) {
@@ -61,7 +65,14 @@ public class FatJarPlugin implements Plugin<Project> {
                 .create(EXTENSION_NAME, FatJarExtension.class, project);
 
         extension.getLauncherClass().convention(DEFAULT_LAUNCHER_CLASS);
-        extension.getArchiveFileName().convention(project.provider(() -> project.getName() + "-fat.jar"));
+
+        // 归档名默认继承项目的 base 配置（Java / Kotlin 项目都适用），classifier 固定为 fat
+        BasePluginExtension base = project.getExtensions().getByType(BasePluginExtension.class);
+        extension.getArchiveBaseName().convention(base.getArchivesName());
+        extension.getArchiveAppendix().convention("");
+        extension.getArchiveVersion().convention(project.provider(() -> project.getVersion().toString()));
+        extension.getArchiveExtension().convention("jar");
+        extension.getArchiveClassifier().convention(DEFAULT_ARCHIVE_CLASSIFIER);
         extension.getClassesPrefix().convention(CLASSES_PREFIX);
         extension.getLibPrefix().convention(LIB_PREFIX);
         extension.getAutoLoaderDependency().convention(true);
@@ -89,7 +100,7 @@ public class FatJarPlugin implements Plugin<Project> {
 
     /**
      * 默认 loader 坐标：版本优先取插件 jar 的 {@code Implementation-Version}，
-     * 取不到时退回 1.1.2。
+     * 取不到时退回 1.2.0。
      */
     public static String defaultLoaderCoordinates() {
         return LOADER_GROUP + ":" + LOADER_NAME + ":" + pluginVersion();

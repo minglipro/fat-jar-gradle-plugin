@@ -69,7 +69,7 @@ fatJar {
     // 下面都是默认值，写出来方便按需修改
     classesPrefix.set("BOOT-INF/classes/")
     libPrefix.set("BOOT-INF/lib/")
-    archiveFileName.set("testFatJar-fat.jar")
+    // archiveFileName 默认 <project>-<version>-fat.jar，这里不覆盖
 
     // 插件不自动建 task，由使用方决定名字和配置
     register("fatJar")

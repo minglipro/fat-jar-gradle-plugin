@@ -60,8 +60,20 @@ public abstract class FatJarExtension {
     /** 依赖 jar 在 fat jar 内的前缀，默认 {@code BOOT-INF/lib/}，末尾斜杠可省略。 */
     public abstract Property<String> getLibPrefix();
 
-    /** 产物文件名，默认 {@code <project.name>-fat.jar}，输出到 {@code build/libs}。 */
-    public abstract Property<String> getArchiveFileName();
+    /** 产物基础名，默认 {@code project.name}。 */
+    public abstract Property<String> getArchiveBaseName();
+
+    /** 产物附录，默认空。 */
+    public abstract Property<String> getArchiveAppendix();
+
+    /** 产物版本，默认 {@code project.version}。 */
+    public abstract Property<String> getArchiveVersion();
+
+    /** 产物扩展名，默认 {@code jar}。 */
+    public abstract Property<String> getArchiveExtension();
+
+    /** 产物 classifier，默认 {@code fat}；置空则省略该段。 */
+    public abstract Property<String> getArchiveClassifier();
 
     /**
      * 是否由插件自动往 {@code fatJarLoader} 配置里添加 launcher 依赖，默认 true。
@@ -115,8 +127,18 @@ public abstract class FatJarExtension {
             task.getLauncherClass().convention(getLauncherClass());
             task.getClassesPrefix().convention(getClassesPrefix());
             task.getLibPrefix().convention(getLibPrefix());
-            task.getArchiveFile().set(project.getLayout().getBuildDirectory()
-                    .file(getArchiveFileName().map(fileName -> "libs/" + fileName)));
+            task.getArchiveBaseName().convention(getArchiveBaseName());
+            task.getArchiveAppendix().convention(getArchiveAppendix());
+            task.getArchiveVersion().convention(getArchiveVersion());
+            task.getArchiveExtension().convention(getArchiveExtension());
+            task.getArchiveClassifier().convention(getArchiveClassifier());
+            task.getArchiveFile().convention(project.getLayout().getBuildDirectory().file(
+                    project.provider(() -> "libs/" + FatJarTask.archiveFileName(
+                            task.getArchiveBaseName().getOrElse(project.getName()),
+                            task.getArchiveAppendix().getOrElse(""),
+                            task.getArchiveVersion().getOrElse(project.getVersion().toString()),
+                            task.getArchiveClassifier().getOrElse(FatJarPlugin.DEFAULT_ARCHIVE_CLASSIFIER),
+                            task.getArchiveExtension().getOrElse("jar")))));
 
             configureAction.execute(task);
         });

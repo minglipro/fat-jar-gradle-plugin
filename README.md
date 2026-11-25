@@ -7,7 +7,7 @@
 
 - **嵌套 fat jar**：业务类在 `BOOT-INF/classes`，依赖 jar 整包放在 `BOOT-INF/lib`，
   不摊平、不合并，`META-INF/services` 不会互相覆盖。
-- **可执行**：自带 `JarLauncher` 和 `NestedJarClassLoader`，`java -jar app-fat.jar` 直接运行。
+- **可执行**：自带 `JarLauncher` 和 `NestedJarClassLoader`，`java -jar app-1.0.0-fat.jar` 直接运行。
 - **懒加载**：自研 `ZipReader` 解析 ZIP 中央目录（支持 ZIP64），启动时只读目录；
   `loadClass` / `openStream` 时才按 offset 读取对应 entry，嵌套 jar 不需要整体驻留堆内存。
 - **Multi-Release 支持**：嵌套 jar 声明 `Multi-Release: true` 时，按运行时版本选择
@@ -32,7 +32,7 @@ git clone <repo-url> fat-jar
 cd fat-jar
 
 ./gradlew :testFatJar:fatJar
-java -jar testFatJar/build/libs/testFatJar-fat.jar
+java -jar testFatJar/build/libs/testFatJar-1.2.0-fat.jar
 ```
 
 预期输出包含：
@@ -70,7 +70,7 @@ pluginManagement {
 // build.gradle.kts
 plugins {
     application
-    id("com.mingliqiye.fatjar") version "1.1.2"
+    id("com.mingliqiye.fatjar") version "1.2.0"
 }
 
 repositories {
@@ -109,7 +109,7 @@ fatJar {
 
 ```bash
 ./gradlew fatJar
-java -jar build/libs/<project-name>-fat.jar
+java -jar build/libs/<project-name>-<version>-fat.jar
 ```
 
 ## 产物结构
@@ -168,12 +168,18 @@ fatJar {
 | `launcherClass` | `com.mingliqiye.fatjar.loader.JarLauncher` | MANIFEST 的 `Main-Class` |
 | `classesPrefix` | `BOOT-INF/classes/` | 业务 classes 前缀，末尾斜杠可省 |
 | `libPrefix` | `BOOT-INF/lib/` | 依赖 jar 前缀 |
-| `archiveFileName` | `<project.name>-fat.jar` | 产物文件名，输出到 `build/libs` |
+| `archiveBaseName` | 继承 `base.archivesName`（默认 `project.name`） | 产物基础名 |
+| `archiveAppendix` | 空 | 基础名后的附录段 |
+| `archiveVersion` | `project.version` | 版本段，`unspecified` 时省略 |
+| `archiveExtension` | `jar` | 扩展名 |
+| `archiveClassifier` | `fat` | classifier，不跟随 `jar` 任务；置空则省略该段 |
+| `archiveFile` | 按上述字段拼出，输出到 `build/libs` | 直接指定输出文件时优先 |
 | `manifestAttributes` | 空 | 追加/覆盖 manifest 属性 |
 | `autoLoaderDependency` | `true` | 自动接线 loader 与注解依赖 |
 | `loaderNotation` | `:jarLoader` 或发布坐标 | loader 依赖写法 |
 
 单个 task 还可以直接覆盖 `startClass`、`classesPrefix`、`libPrefix`、`archiveFile`、
+`archiveBaseName`、`archiveAppendix`、`archiveVersion`、`archiveExtension`、`archiveClassifier`、
 `loaderJars`、`appClasses`、`appResources`、`runtimeLibs` 等属性。
 
 ## 入口扫描原理
