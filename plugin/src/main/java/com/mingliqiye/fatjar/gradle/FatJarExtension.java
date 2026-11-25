@@ -7,6 +7,7 @@ import java.util.Map;
 
 import org.gradle.api.Action;
 import org.gradle.api.Project;
+import org.gradle.api.plugins.JavaApplication;
 import org.gradle.api.provider.Property;
 import org.gradle.api.tasks.SourceSet;
 import org.gradle.api.tasks.SourceSetContainer;
@@ -41,8 +42,14 @@ public abstract class FatJarExtension {
         this.project = project;
     }
 
-    /** 业务入口（MANIFEST 的 {@code Start-Class}）；不设置时取 {@code application.mainClass}。 */
+    /** 显式指定的业务入口（MANIFEST 的 {@code Start-Class}）；为空时走注解扫描 / application.mainClass。 */
     public abstract Property<String> getStartClass();
+
+    /**
+     * 扫描入口类用的注解全限定名，默认 {@code com.mingliqiye.fatjar.FatJarApplication}。
+     * 置空字符串可关闭扫描。
+     */
+    public abstract Property<String> getStartClassAnnotation();
 
     /** launcher 类（MANIFEST 的 {@code Main-Class}），默认 {@code com.mingliqiye.fatjar.loader.JarLauncher}。 */
     public abstract Property<String> getLauncherClass();
@@ -98,6 +105,11 @@ public abstract class FatJarExtension {
             }));
             task.getRuntimeLibs().from(project.getConfigurations().getByName("runtimeClasspath"));
             task.getStartClass().convention(getStartClass());
+            task.getStartClassAnnotation().convention(getStartClassAnnotation());
+            task.getApplicationMainClass().convention(project.provider(() -> {
+                JavaApplication application = project.getExtensions().findByType(JavaApplication.class);
+                return application == null ? "" : application.getMainClass().getOrElse("");
+            }));
             task.getLauncherClass().convention(getLauncherClass());
             task.getClassesPrefix().convention(getClassesPrefix());
             task.getLibPrefix().convention(getLibPrefix());
@@ -109,8 +121,8 @@ public abstract class FatJarExtension {
     }
 
     /**
-     * register 时按需把 launcher 依赖加进 {@code fatJarLoader}，避免使用方手写
-     * {@code add("fatJarLoader", project(":jarLoader"))}。
+     * register 时按需把 launcher 依赖加进 {@code fatJarLoader}，并把注解模块加到
+     * {@code compileOnly}，使用方不用手写任何这两类依赖。
      */
     private void addLoaderDependencyIfNeeded() {
         if (loaderDependencyAdded || !getAutoLoaderDependency().getOrElse(true)) {
@@ -121,12 +133,26 @@ public abstract class FatJarExtension {
             return;
         }
         loaderDependencyAdded = true;
+        addDependency(FatJarPlugin.LOADER_CONFIGURATION_NAME, notation);
+        if (project.getConfigurations().findByName("compileOnly") != null) {
+            // 让使用方可以直接用 @FastJarApplication，不用自己加 compileOnly 依赖
+            addDependency("compileOnly", annotationNotation());
+        }
+    }
+
+    private String annotationNotation() {
+        if (project.getRootProject().findProject(":annotation") != null) {
+            return ":annotation";
+        }
+        return FatJarPlugin.defaultAnnotationCoordinates();
+    }
+
+    private void addDependency(String configuration, String notation) {
         if (notation.startsWith(":")) {
-            project.getDependencies().add(
-                    FatJarPlugin.LOADER_CONFIGURATION_NAME,
+            project.getDependencies().add(configuration,
                     project.getDependencies().project(Map.of("path", notation)));
         } else {
-            project.getDependencies().add(FatJarPlugin.LOADER_CONFIGURATION_NAME, notation);
+            project.getDependencies().add(configuration, notation);
         }
     }
 }

@@ -6,7 +6,6 @@ import org.gradle.api.artifacts.Configuration;
 import org.gradle.api.attributes.Category;
 import org.gradle.api.attributes.LibraryElements;
 import org.gradle.api.attributes.Usage;
-import org.gradle.api.plugins.JavaApplication;
 
 /**
  * 把业务工程打成 Spring Boot 风格的嵌套 fat jar。
@@ -38,9 +37,14 @@ public class FatJarPlugin implements Plugin<Project> {
     public static final String LOADER_CONFIGURATION_NAME = "fatJarLoader";
     public static final String DEFAULT_LAUNCHER_CLASS = "com.mingliqiye.fatjar.loader.JarLauncher";
 
+    /** 默认的入口注解：标在 main 类上即可自动装配 Start-Class。 */
+    public static final String DEFAULT_START_CLASS_ANNOTATION =
+            "com.mingliqiye.fatjar.annotation.FastJarApplication";
+
     /** loader 的 maven 坐标（未发布前本地构建会优先用 :jarLoader 工程）。 */
     public static final String LOADER_GROUP = "com.mingliqiye.gradle.plugin.fatjar";
     public static final String LOADER_NAME = "jarLoader";
+    public static final String ANNOTATION_NAME = "annotation";
     private static final String LOADER_FALLBACK_VERSION = "1.0.0";
 
     /** 嵌套 jar 内业务 classes 的默认前缀。 */
@@ -67,10 +71,7 @@ public class FatJarPlugin implements Plugin<Project> {
             }
             return defaultLoaderCoordinates();
         }));
-        extension.getStartClass().convention(project.provider(() -> {
-            JavaApplication application = project.getExtensions().findByType(JavaApplication.class);
-            return application == null ? "" : application.getMainClass().getOrElse("");
-        }));
+        extension.getStartClassAnnotation().convention(DEFAULT_START_CLASS_ANNOTATION);
 
         Configuration loader = project.getConfigurations().create(LOADER_CONFIGURATION_NAME);
         loader.setDescription("Launcher and nested jar class loader classes that are copied into the fat jar root.");
@@ -91,12 +92,18 @@ public class FatJarPlugin implements Plugin<Project> {
      * 取不到时退回 1.0.0。
      */
     public static String defaultLoaderCoordinates() {
+        return LOADER_GROUP + ":" + LOADER_NAME + ":" + pluginVersion();
+    }
+
+    /** 默认注解模块坐标（{@code @FastJarApplication} 所在 jar）。 */
+    public static String defaultAnnotationCoordinates() {
+        return LOADER_GROUP + ":" + ANNOTATION_NAME + ":" + pluginVersion();
+    }
+
+    private static String pluginVersion() {
         String version = FatJarPlugin.class.getPackage() == null
                 ? null
                 : FatJarPlugin.class.getPackage().getImplementationVersion();
-        if (version == null || version.isBlank()) {
-            version = LOADER_FALLBACK_VERSION;
-        }
-        return LOADER_GROUP + ":" + LOADER_NAME + ":" + version;
+        return version == null || version.isBlank() ? LOADER_FALLBACK_VERSION : version;
     }
 }

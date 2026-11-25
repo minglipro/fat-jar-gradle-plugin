@@ -9,8 +9,6 @@ allprojects {
     version = providers.gradleProperty("version").get()
 
     repositories {
-        maven {
-            url = uri("https://repository.mingliqiye.com/repository/maven-public/")
-        }
+        mavenCentral()
     }
 }

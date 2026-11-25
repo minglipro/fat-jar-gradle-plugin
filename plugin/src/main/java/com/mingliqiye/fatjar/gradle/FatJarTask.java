@@ -31,6 +31,7 @@ import org.gradle.api.provider.MapProperty;
 import org.gradle.api.provider.Property;
 import org.gradle.api.tasks.Input;
 import org.gradle.api.tasks.InputFiles;
+import org.gradle.api.tasks.Optional;
 import org.gradle.api.tasks.OutputFile;
 import org.gradle.api.tasks.PathSensitive;
 import org.gradle.api.tasks.PathSensitivity;
@@ -82,7 +83,18 @@ public abstract class FatJarTask extends DefaultTask {
     public abstract ConfigurableFileCollection getRuntimeLibs();
 
     @Input
+    @Optional
     public abstract Property<String> getStartClass();
+
+    /** 扫描入口类用的注解全限定名；空字符串表示不扫描。 */
+    @Input
+    @Optional
+    public abstract Property<String> getStartClassAnnotation();
+
+    /** {@code application.mainClass} 的兜底值。 */
+    @Input
+    @Optional
+    public abstract Property<String> getApplicationMainClass();
 
     @Input
     public abstract Property<String> getLauncherClass();
@@ -104,11 +116,19 @@ public abstract class FatJarTask extends DefaultTask {
 
     @TaskAction
     public void assemble() throws IOException {
-        String startClass = getStartClass().getOrNull();
-        if (startClass == null || startClass.isBlank()) {
+        String startClass = trimToNull(getStartClass().getOrNull());
+        if (startClass == null) {
+            startClass = findAnnotatedStartClass();
+        }
+        if (startClass == null) {
+            startClass = trimToNull(getApplicationMainClass().getOrNull());
+        }
+        if (startClass == null) {
+            String annotation = getStartClassAnnotation()
+                    .getOrElse(FatJarPlugin.DEFAULT_START_CLASS_ANNOTATION);
             throw new GradleException(
-                    "No start class configured. Set `fatJar.startClass` or apply the `application` plugin "
-                            + "and configure `application.mainClass`.");
+                    "No start class configured. Set `fatJar.startClass`, annotate the main class with @"
+                            + annotation + ", or configure `application.mainClass`.");
         }
         String launcherClass = getLauncherClass().get();
         String classesPrefix = normalizePrefix(
@@ -171,6 +191,73 @@ public abstract class FatJarTask extends DefaultTask {
             prefix = prefix.substring(1);
         }
         return prefix.endsWith("/") ? prefix : prefix + "/";
+    }
+
+    private static String trimToNull(String value) {
+        if (value == null) {
+            return null;
+        }
+        String trimmed = value.trim();
+        return trimmed.isEmpty() ? null : trimmed;
+    }
+
+    /**
+     * 扫描编译产物，找唯一一个带指定注解、且声明了 {@code public static void main(String[])} 的类。
+     * 找不到返回 null；多个或注解类没有 main 时直接报错。
+     */
+    private String findAnnotatedStartClass() throws IOException {
+        String annotation = trimToNull(getStartClassAnnotation()
+                .getOrElse(FatJarPlugin.DEFAULT_START_CLASS_ANNOTATION));
+        if (annotation == null) {
+            return null;
+        }
+        String descriptor = "L" + annotation.replace('.', '/') + ";";
+        List<String> candidates = new ArrayList<>();
+        List<String> withoutMain = new ArrayList<>();
+
+        for (File classes : getAppClasses().getFiles()) {
+            Path root = classes.toPath();
+            if (!Files.isDirectory(root)) {
+                continue;
+            }
+            List<Path> classFiles;
+            try (Stream<Path> stream = Files.walk(root)) {
+                classFiles = stream.filter(path -> path.toString().endsWith(".class"))
+                        .sorted()
+                        .toList();
+            }
+            for (Path classFile : classFiles) {
+                byte[] bytes = Files.readAllBytes(classFile);
+                ClassFileScanner.ScannedClass scanned;
+                try {
+                    scanned = ClassFileScanner.scan(bytes);
+                } catch (RuntimeException ex) {
+                    throw new GradleException("Cannot scan class file " + classFile, ex);
+                }
+                if (!scanned.annotations().contains(descriptor)) {
+                    continue;
+                }
+                String name = scanned.className().replace('/', '.');
+                if (scanned.hasMain()) {
+                    candidates.add(name);
+                } else {
+                    withoutMain.add(name);
+                }
+            }
+        }
+
+        if (candidates.size() > 1) {
+            throw new GradleException(
+                    "More than one class annotated with @" + annotation + ": " + candidates);
+        }
+        if (candidates.size() == 1) {
+            return candidates.get(0);
+        }
+        if (!withoutMain.isEmpty()) {
+            throw new GradleException("Class annotated with @" + annotation
+                    + " must declare public static void main(String[]): " + withoutMain);
+        }
+        return null;
     }
 
     private File findLoader(String launcherClass) {

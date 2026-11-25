@@ -12,7 +12,6 @@ import org.gradle.api.tasks.compile.JavaCompile
  */
 
 plugins {
-    application
     id("com.mingliqiye.fatjar")
 }
 
@@ -23,10 +22,6 @@ tasks.withType<JavaCompile>().configureEach {
     } else {
         options.release.set(17)
     }
-}
-
-application {
-    mainClass.set("com.example.testfatjar.Main")
 }
 
 // 第二个 source set，单独打一个「依赖 jar」，最终落在依赖前缀下

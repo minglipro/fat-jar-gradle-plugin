@@ -5,7 +5,7 @@ import org.gradle.api.tasks.compile.JavaCompile
  * fatjar Gradle 插件。
  *
  * 插件 id : com.mingliqiye.fatjar
- * 坐标    : com.mingliqiye.gradle.plugin.fatjar:plugin:<version>
+ * 坐标    : com.mingliqiye.gradle.plugin.fatjar:fatjar-plugin:<version>
  *
  * 版本来自仓库根的 gradle.properties：composite build 不会继承父构建的
  * gradle.properties，所以这里显式读一次，保持与根工程同版本。
@@ -20,6 +20,7 @@ import org.gradle.api.tasks.compile.JavaCompile
 
 plugins {
     `java-gradle-plugin`
+    `maven-publish`
 }
 
 val sharedProperties = Properties()
@@ -50,5 +51,33 @@ gradlePlugin {
 tasks.jar {
     manifest {
         attributes(mapOf("Implementation-Version" to version))
+    }
+}
+
+// 发布目标：由环境提供（init 脚本 / CI），或通过 -PrepoUrl / REPO_URL 指定；凭据走外部参数
+val repoUrl = providers.gradleProperty("repoUrl")
+    .orElse(providers.environmentVariable("REPO_URL"))
+val repoUsername = providers.gradleProperty("repoUsername")
+    .orElse(providers.environmentVariable("REPO_USERNAME"))
+val repoPassword = providers.gradleProperty("repoPassword")
+    .orElse(providers.environmentVariable("REPO_PASSWORD"))
+
+// java-gradle-plugin 会为每个插件自动创建 pluginMaven + plugin marker publication
+publishing {
+    // 已有发布仓库（由 init 脚本 / CI 注入）时不再重复添加；否则用 repoUrl 指定的仓库。
+    val publishRepositories = repositories
+    if (publishRepositories.isEmpty() && repoUrl.isPresent) {
+        publishRepositories.maven {
+            name = "private"
+            url = uri(repoUrl.get())
+            val repoUser = repoUsername.orNull
+            val repoPass = repoPassword.orNull
+            if (repoUser != null && repoPass != null) {
+                credentials {
+                    username = repoUser
+                    password = repoPass
+                }
+            }
+        }
     }
 }

@@ -13,10 +13,8 @@
 pluginManagement {
     includeBuild("plugin")
     repositories {
-        maven {
-            url = uri("https://repository.mingliqiye.com/repository/maven-public/")
-        }
         gradlePluginPortal()
+        mavenCentral()
     }
 }
 
@@ -24,3 +22,4 @@ rootProject.name = "fat-jar"
 
 include("jarLoader")
 include("testFatJar")
+include("annotation")

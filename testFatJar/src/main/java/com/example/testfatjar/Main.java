@@ -1,6 +1,7 @@
 package com.example.testfatjar;
 
 import com.example.testfatjar.greeting.Greeting;
+import com.mingliqiye.fatjar.annotation.FastJarApplication;
 
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
@@ -15,6 +16,7 @@ import java.util.ServiceLoader;
  * 业务类由自定义 NestedJarClassLoader 加载、嵌套 jar 里的类能加载、
  * 两个 jar 里的 META-INF/services 被正确合并、资源 URL 能 openStream()。</p>
  */
+@FastJarApplication
 public final class Main {
 
     private Main() {

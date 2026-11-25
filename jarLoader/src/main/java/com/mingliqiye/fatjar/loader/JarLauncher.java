@@ -112,3 +112,4 @@ public final class JarLauncher {
         return archive;
     }
 }
+
