@@ -70,7 +70,7 @@ pluginManagement {
 // build.gradle.kts
 plugins {
     application
-    id("com.mingliqiye.fatjar") version "1.0.0"
+    id("com.mingliqiye.fatjar") version "1.1.0"
 }
 
 repositories {
