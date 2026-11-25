@@ -103,6 +103,8 @@ public abstract class FatJarExtension {
                 File resourcesDir = main.getOutput().getResourcesDir();
                 return resourcesDir == null ? Collections.emptyList() : List.of(resourcesDir);
             }));
+            // 保证只跑 fatJar 时也先执行 processResources，不会漏掉业务资源
+            task.dependsOn(main.getProcessResourcesTaskName());
             task.getRuntimeLibs().from(project.getConfigurations().getByName("runtimeClasspath"));
             task.getStartClass().convention(getStartClass());
             task.getStartClassAnnotation().convention(getStartClassAnnotation());
