@@ -4,6 +4,7 @@ import com.example.testfatjar.greeting.Greeting;
 import com.mingliqiye.fatjar.annotation.FastJarApplication;
 
 import java.io.InputStream;
+import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
@@ -51,6 +52,16 @@ public final class Main {
         System.out.println("app resource      : " + read("app-resource.txt"));
         System.out.println("lib resource      : " + read("lib-resource.txt"));
 
+        // Log4j2 等库会走 URL.toURI().toURL()，验证 fatjar 协议已全局注册
+        String appViaUri = readUri("app-resource.txt");
+        String libViaUri = readUri("lib-resource.txt");
+        System.out.println("app via URI       : " + appViaUri);
+        System.out.println("lib via URI       : " + libViaUri);
+        if (!"resource from BOOT-INF/classes".equals(appViaUri)
+                || !"resource from BOOT-INF/lib".equals(libViaUri)) {
+            throw new IllegalStateException("fatjar URL toURI/toURL round-trip failed");
+        }
+
         if (greetings.size() != 2) {
             throw new IllegalStateException(
                     "Expected 2 greetings (one in BOOT-INF/classes, one in BOOT-INF/lib) but found "
@@ -67,6 +78,16 @@ public final class Main {
     private static String read(String name) throws Exception {
         try (InputStream in = Main.class.getClassLoader().getResourceAsStream(name)) {
             return in == null ? "<missing>" : new String(in.readAllBytes(), StandardCharsets.UTF_8).trim();
+        }
+    }
+
+    private static String readUri(String name) throws Exception {
+        URL resource = Main.class.getClassLoader().getResource(name);
+        if (resource == null) {
+            return "<missing>";
+        }
+        try (InputStream in = resource.toURI().toURL().openStream()) {
+            return new String(in.readAllBytes(), StandardCharsets.UTF_8).trim();
         }
     }
 }

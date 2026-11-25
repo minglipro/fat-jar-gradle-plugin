@@ -5,8 +5,6 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.net.MalformedURLException;
 import java.net.URL;
-import java.net.URLConnection;
-import java.net.URLStreamHandler;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -47,10 +45,12 @@ public final class NestedJarClassLoader extends ClassLoader {
     private static final int RUNTIME_VERSION = Runtime.version().feature();
 
     private final List<Root> roots;
+    private final String urlToken;
 
     private NestedJarClassLoader(List<Root> roots) {
         super("fat-jar", ClassLoader.getPlatformClassLoader());
         this.roots = List.copyOf(roots);
+        this.urlToken = FatJarUrlStreamHandler.register(this);
     }
 
     /**
@@ -185,12 +185,17 @@ public final class NestedJarClassLoader extends ClassLoader {
     }
 
     private URL createUrl(int rootIndex, String name) {
-        Root root = roots.get(rootIndex);
         try {
-            return new URL(null, "fatjar:/" + rootIndex + "/" + name, new RootHandler(root, name));
+            return new URL(null, "fatjar:/" + urlToken + "/" + rootIndex + "/" + name,
+                    FatJarUrlStreamHandler.INSTANCE);
         } catch (MalformedURLException ex) {
             throw new IllegalStateException("Cannot create resource URL for " + name, ex);
         }
+    }
+
+    /** 供 {@link FatJarResourceConnection} 按需读取资源内容。 */
+    byte[] readResource(int rootIndex, String name) throws IOException {
+        return roots.get(rootIndex).read(name);
     }
 
     /**
@@ -235,67 +240,6 @@ public final class NestedJarClassLoader extends ClassLoader {
                 throw new IOException("No such entry: " + path);
             }
             return reader.read(entry);
-        }
-    }
-
-    /** 让 fatjar: 协议可以直接 openStream()；真正读取发生在 openStream 时。 */
-    private static final class RootHandler extends URLStreamHandler {
-
-        private final Root root;
-        private final String name;
-
-        private RootHandler(Root root, String name) {
-            this.root = root;
-            this.name = name;
-        }
-
-        @Override
-        protected URLConnection openConnection(URL url) {
-            return new ResourceConnection(url, root, name);
-        }
-
-        @Override
-        protected int hashCode(URL url) {
-            return name.hashCode();
-        }
-
-        @Override
-        protected boolean equals(URL first, URL second) {
-            return first.toString().equals(second.toString());
-        }
-    }
-
-    private static final class ResourceConnection extends URLConnection {
-
-        private final Root root;
-        private final String name;
-
-        private ResourceConnection(URL url, Root root, String name) {
-            super(url);
-            this.root = root;
-            this.name = name;
-        }
-
-        @Override
-        public void connect() {
-            connected = true;
-        }
-
-        @Override
-        public InputStream getInputStream() throws IOException {
-            connect();
-            return new ByteArrayInputStream(root.read(name));
-        }
-
-        @Override
-        public String getContentType() {
-            String guessed = guessContentTypeFromName(name);
-            return guessed != null ? guessed : "application/octet-stream";
-        }
-
-        @Override
-        public long getLastModified() {
-            return 0L;
         }
     }
 }
