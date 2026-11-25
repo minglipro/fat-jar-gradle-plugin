@@ -34,6 +34,9 @@ val libProviderJar = tasks.register<Jar>("libProviderJar") {
     archiveVersion.set("")
     destinationDirectory.set(layout.buildDirectory.dir("libs"))
     from(libProvider.output)
+    manifest {
+        attributes("Implementation-Version" to "provider-1.0")
+    }
 }
 
 // 多版本 jar：base 与 versioned 各一份 Probe，用来验证 META-INF/versions/21 优先于 base

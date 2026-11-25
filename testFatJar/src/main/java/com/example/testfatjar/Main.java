@@ -40,6 +40,18 @@ public final class Main {
                 "com.example.testfatjar.provider.SpanishGreeting", true, Main.class.getClassLoader());
         System.out.println("provider loader   : " + provider.getClassLoader());
 
+        String appPackageVersion = Main.class.getPackage().getImplementationVersion();
+        String nestedPackageVersion = provider.getPackage().getImplementationVersion();
+        System.out.println("app package ver   : " + appPackageVersion);
+        System.out.println("nested pkg ver    : " + nestedPackageVersion);
+        if (appPackageVersion == null || appPackageVersion.isBlank()) {
+            throw new IllegalStateException("Business classes lost their Implementation-Version");
+        }
+        if (!"provider-1.0".equals(nestedPackageVersion)) {
+            throw new IllegalStateException(
+                    "Nested jar package version should be provider-1.0 but was " + nestedPackageVersion);
+        }
+
         Class<?> probe = Class.forName("com.example.mr.Probe", true, Main.class.getClassLoader());
         String probeValue = (String) probe.getMethod("value").invoke(null);
         System.out.println("multi-release     : " + probeValue);

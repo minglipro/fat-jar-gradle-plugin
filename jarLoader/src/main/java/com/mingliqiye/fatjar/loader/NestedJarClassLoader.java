@@ -10,6 +10,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Enumeration;
 import java.util.List;
+import java.util.jar.Attributes;
 import java.util.jar.Manifest;
 
 /**
@@ -73,7 +74,7 @@ public final class NestedJarClassLoader extends ClassLoader {
 
         List<Root> roots = new ArrayList<>();
         // 业务 classes 永远排第一：同名类以业务代码为准
-        roots.add(new Root(fatJar, classesPrefix, false));
+        roots.add(new Root(fatJar, classesPrefix, false, PackageMetadata.from(fatJar)));
 
         List<String> nestedJars = new ArrayList<>();
         for (String name : fatJar.names()) {
@@ -94,21 +95,37 @@ public final class NestedJarClassLoader extends ClassLoader {
                 source = new ZipReader.ByteArraySource(fatJar.read(name));
             }
             ZipReader nested = ZipReader.open(source);
+            PackageMetadata metadata = PackageMetadata.from(nested);
             // 嵌套 jar 自己声明 Multi-Release 时才启用版本化条目
-            roots.add(new Root(nested, "", isMultiRelease(nested)));
+            roots.add(new Root(nested, "", metadata.multiRelease(), metadata));
         }
         return new NestedJarClassLoader(roots);
     }
 
-    private static boolean isMultiRelease(ZipReader reader) {
-        if (!reader.contains("META-INF/MANIFEST.MF")) {
-            return false;
-        }
-        try (InputStream in = new ByteArrayInputStream(reader.read("META-INF/MANIFEST.MF"))) {
-            Manifest manifest = new Manifest(in);
-            return Boolean.parseBoolean(manifest.getMainAttributes().getValue("Multi-Release"));
-        } catch (IOException ex) {
-            return false;
+    /** 一个根自己的 manifest 元数据，用于定义包信息（Package.getImplementationVersion 等）。 */
+    private record PackageMetadata(String specTitle, String specVersion, String specVendor,
+            String implTitle, String implVersion, String implVendor, boolean multiRelease) {
+
+        private static final PackageMetadata EMPTY =
+                new PackageMetadata(null, null, null, null, null, null, false);
+
+        private static PackageMetadata from(ZipReader reader) {
+            if (!reader.contains("META-INF/MANIFEST.MF")) {
+                return EMPTY;
+            }
+            try (InputStream in = new ByteArrayInputStream(reader.read("META-INF/MANIFEST.MF"))) {
+                Attributes attributes = new Manifest(in).getMainAttributes();
+                return new PackageMetadata(
+                        attributes.getValue("Specification-Title"),
+                        attributes.getValue("Specification-Version"),
+                        attributes.getValue("Specification-Vendor"),
+                        attributes.getValue("Implementation-Title"),
+                        attributes.getValue("Implementation-Version"),
+                        attributes.getValue("Implementation-Vendor"),
+                        Boolean.parseBoolean(attributes.getValue("Multi-Release")));
+            } catch (IOException ex) {
+                return EMPTY;
+            }
         }
     }
 
@@ -121,12 +138,33 @@ public final class NestedJarClassLoader extends ClassLoader {
             }
             try {
                 byte[] bytes = root.read(path);
+                ensurePackage(name, root);
                 return defineClass(name, bytes, 0, bytes.length);
             } catch (IOException ex) {
                 throw new ClassNotFoundException(name, ex);
             }
         }
         throw new ClassNotFoundException(name);
+    }
+
+    /** 按根自己的 manifest 定义包信息，保证 Package#getImplementationVersion() 等可用。 */
+    private void ensurePackage(String className, Root root) {
+        int lastDot = className.lastIndexOf('.');
+        if (lastDot < 0) {
+            return;
+        }
+        String packageName = className.substring(0, lastDot);
+        if (getDefinedPackage(packageName) != null) {
+            return;
+        }
+        PackageMetadata metadata = root.metadata;
+        try {
+            definePackage(packageName,
+                    metadata.specTitle(), metadata.specVersion(), metadata.specVendor(),
+                    metadata.implTitle(), metadata.implVersion(), metadata.implVendor(), null);
+        } catch (IllegalArgumentException ignored) {
+            // 并发加载同一个包时可能已被其他线程定义
+        }
     }
 
     @Override
@@ -210,11 +248,13 @@ public final class NestedJarClassLoader extends ClassLoader {
         private final ZipReader reader;
         private final String prefix;
         private final boolean multiRelease;
+        private final PackageMetadata metadata;
 
-        private Root(ZipReader reader, String prefix, boolean multiRelease) {
+        private Root(ZipReader reader, String prefix, boolean multiRelease, PackageMetadata metadata) {
             this.reader = reader;
             this.prefix = prefix;
             this.multiRelease = multiRelease;
+            this.metadata = metadata;
         }
 
         private String resolve(String path) {

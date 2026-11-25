@@ -196,6 +196,18 @@ public abstract class FatJarTask extends DefaultTask {
         attributes.putValue(CLASSES_ATTRIBUTE, classesPrefix);
         attributes.putValue(LIB_ATTRIBUTE, libPrefix);
         attributes.putValue("Created-By", "fatjar gradle plugin");
+
+        // 业务 classes 根没有自己的嵌套 jar，这里把自己的版本写进 manifest，
+        // 供 Package#getImplementationVersion() 等读取
+        String implementationTitle = getArchiveBaseName().getOrElse("");
+        if (!implementationTitle.isBlank()) {
+            attributes.putValue("Implementation-Title", implementationTitle);
+        }
+        String implementationVersion = getArchiveVersion().getOrElse("");
+        if (!implementationVersion.isBlank() && !"unspecified".equals(implementationVersion)) {
+            attributes.putValue("Implementation-Version", implementationVersion);
+        }
+
         getManifestAttributes().getOrElse(Collections.emptyMap())
                 .forEach(attributes::putValue);
 
