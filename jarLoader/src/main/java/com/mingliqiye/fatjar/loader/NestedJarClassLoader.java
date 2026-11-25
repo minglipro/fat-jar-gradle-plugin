@@ -242,11 +242,8 @@ public final class NestedJarClassLoader extends ClassLoader {
     }
 
     private boolean isDirectoryRequest(String name) {
-        if (name.isEmpty() || name.endsWith("/")) {
-            return true;
-        }
-        boolean fileExists = roots.stream().anyMatch(root -> root.contains(name));
-        return !fileExists && roots.stream().anyMatch(root -> root.hasDirectory(name));
+        // 只把显式以 / 结尾（或空路径）的请求当目录，避免对每个资源名遍历整个 zip
+        return name.isEmpty() || name.endsWith("/");
     }
 
     private URL directoryUrl(int rootIndex, String name) throws IOException {
@@ -378,16 +375,6 @@ public final class NestedJarClassLoader extends ClassLoader {
             return reader.read(entry);
         }
 
-        private boolean hasDirectory(String path) {
-            String prefixPath = prefix + path + "/";
-            for (String entry : reader.names()) {
-                if (entry.startsWith(prefixPath)) {
-                    return true;
-                }
-            }
-            return false;
-        }
-
         private List<String> entriesUnder(String directory) {
             String prefixPath = prefix + directory;
             List<String> entries = new ArrayList<>();
@@ -404,17 +391,37 @@ public final class NestedJarClassLoader extends ClassLoader {
             String base = prefix + directory;
             for (String entry : entries) {
                 String relative = entry.substring(base.length());
-                if (relative.isEmpty()) {
+                // 目录 entry（以 / 结尾）不落成文件，否则后续子文件无法建目录
+                if (relative.isEmpty() || relative.endsWith("/")) {
                     continue;
                 }
                 Path destination = target.resolve(relative).normalize();
                 if (!destination.startsWith(target)) {
                     continue;
                 }
-                if (destination.getParent() != null) {
-                    Files.createDirectories(destination.getParent());
+                ensureParentDirectories(destination);
+                if (Files.isDirectory(destination)) {
+                    continue;
                 }
                 Files.write(destination, reader.read(entry));
+            }
+        }
+
+        /** 逐级建目录；遇到之前被解压成文件的同名路径时先删掉文件。 */
+        private static void ensureParentDirectories(Path file) throws IOException {
+            Path parent = file.getParent();
+            if (parent == null) {
+                return;
+            }
+            Path current = parent.getRoot();
+            for (Path part : parent) {
+                current = current == null ? part : current.resolve(part);
+                if (Files.exists(current) && !Files.isDirectory(current)) {
+                    Files.delete(current);
+                }
+                if (!Files.exists(current)) {
+                    Files.createDirectory(current);
+                }
             }
         }
     }
