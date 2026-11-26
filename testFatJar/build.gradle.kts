@@ -75,7 +75,8 @@ fatJar {
     // archiveFileName 默认 <project>-<version>-fat.jar，这里不覆盖
 
     // 插件不自动建 task，由使用方决定名字和配置
-    register("fatJar")
+    // 无参 register() 的默认 task 名为 "fatjar"
+    register()
 
     // 第二个 task：验证 classesPrefix / libPrefix / manifest 都可以按 task 覆盖
     register("fatJarCustom") {

@@ -20,12 +20,9 @@ java {
 }
 
 // 发布目标：由环境提供（init 脚本 / CI），或通过 -PrepoUrl / REPO_URL 指定；凭据走外部参数
-val repoUrl = providers.gradleProperty("repoUrl")
-    .orElse(providers.environmentVariable("REPO_URL"))
-val repoUsername = providers.gradleProperty("repoUsername")
-    .orElse(providers.environmentVariable("REPO_USERNAME"))
-val repoPassword = providers.gradleProperty("repoPassword")
-    .orElse(providers.environmentVariable("REPO_PASSWORD"))
+val repoUrl = providers.gradleProperty("repoUrl").orElse(providers.environmentVariable("REPO_URL"))
+val repoUsername = providers.gradleProperty("repoUsername").orElse(providers.environmentVariable("REPO_USERNAME"))
+val repoPassword = providers.gradleProperty("repoPassword").orElse(providers.environmentVariable("REPO_PASSWORD"))
 
 publishing {
     publications {

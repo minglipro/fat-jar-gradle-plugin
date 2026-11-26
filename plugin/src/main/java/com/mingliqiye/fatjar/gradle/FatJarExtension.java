@@ -90,7 +90,12 @@ public abstract class FatJarExtension {
 
     private boolean loaderDependencyAdded;
 
-    /** 用默认配置注册一个 fat jar task。 */
+    /** 用默认配置注册一个 fat jar task，默认 task 名为 {@code fatjar}。 */
+    public TaskProvider<FatJarTask> register() {
+        return register("fatjar");
+    }
+
+    /** 用默认配置注册一个指定名字的 fat jar task。 */
     public TaskProvider<FatJarTask> register(String name) {
         return register(name, task -> {
         });

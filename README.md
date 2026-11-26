@@ -31,8 +31,8 @@
 git clone <repo-url> fat-jar
 cd fat-jar
 
-./gradlew :testFatJar:fatJar
-java -jar testFatJar/build/libs/testFatJar-1.2.3-fat.jar
+./gradlew :testFatJar:fatjar
+java -jar testFatJar/build/libs/testFatJar-1.3.0-fat.jar
 ```
 
 预期输出包含：
@@ -70,7 +70,7 @@ pluginManagement {
 // build.gradle.kts
 plugins {
     application
-    id("com.mingliqiye.fatjar") version "1.2.3"
+    id("com.mingliqiye.fatjar") version "1.3.0"
 }
 
 repositories {
@@ -79,7 +79,8 @@ repositories {
 
 fatJar {
     // 插件不会自动创建 task，需要自己注册
-    register("fatJar")
+    // 无参 register() 默认注册名为 "fatjar" 的 task
+    register()
 }
 ```
 
@@ -101,14 +102,14 @@ public final class Application {
 ```kotlin
 fatJar {
     startClass.set("com.example.Application")
-    register("fatJar")
+    register()
 }
 ```
 
 然后：
 
 ```bash
-./gradlew fatJar
+./gradlew fatjar
 java -jar build/libs/<project-name>-<version>-fat.jar
 ```
 
@@ -149,7 +150,7 @@ BOOT-INF/lib/*.jar                       依赖 jar（STORED 不压缩，可随�
 
 ```kotlin
 fatJar {
-    register("fatJar")
+    register()
     register("fatJarCustom") {
         classesPrefix.set("APP-INF/classes")
         libPrefix.set("APP-INF/lib")
@@ -158,6 +159,9 @@ fatJar {
     }
 }
 ```
+
+`register()` 默认创建名为 `fatjar` 的 task；也可以传名字，例如
+`register("fatJar")` 创建名为 `fatJar` 的 task。
 
 常用属性：
 
@@ -212,7 +216,7 @@ fatJar {
 
 - 版本统一在根 [gradle.properties](gradle.properties) 中维护；`plugin` 是 composite build，
   会显式读取该文件。
-- 构建示例：`./gradlew :testFatJar:fatJar :testFatJar:fatJarCustom`。
+- 构建示例：`./gradlew :testFatJar:fatjar :testFatJar:fatJarCustom`。
 - 发布相关配置使用 `maven-publish`，仓库地址与凭据通过 `repoUrl` / `REPO_URL` 等外部参数提供，
   不要提交凭据。
 
